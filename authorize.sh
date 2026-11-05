@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 [[ $EUID -eq 0 && $# -eq 1 ]] || { echo 'Uso: sudo bash server/authorize.sh telefono.pub' >&2; exit 1; }
-python3 - "$1" <<'PY'
+python3 - "$1" 3<&0 <<'PY'
 import base64, pathlib, struct, sys
-line = pathlib.Path(sys.argv[1]).read_text().strip()
+source = open(3) if sys.argv[1] == "/dev/stdin" else open(sys.argv[1])
+with source:
+    line = source.read().strip()
 parts = line.split()
 if len(parts) < 2 or parts[0] != 'ssh-rsa' or '\n' in line:
     raise SystemExit('Se requiere una única clave pública RSA OpenSSH')
