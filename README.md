@@ -2,11 +2,25 @@
 
 Servidor SSH para la app Android Personal Remote en CachyOS/Arch con systemd. La app usa RSA y comprueba la huella del servidor. Puerto 2222, scripts en `/home/maetti/.personalScripts`.
 
-## Instalación
+## Instalar en otra PC desde GitHub
 
-En el PC original ejecuta `bash setup.sh` como tu usuario desde este directorio. El asistente pide sudo para instalar las dependencias que falten y configurar systemd. Autoriza GitHub mediante la CLI oficial, que muestra la URL y el código para el navegador. El asistente crea el repositorio privado `personal-remote-server` en tu cuenta, publica el código del servidor y registra una clave de despliegue de lectura para este PC. Si el nombre ya está ocupado, el asistente se detiene antes de adoptar el repositorio existente.
+Entra por SSH a la nueva PC CachyOS/Arch como `maetti`, con acceso a sudo. Pega este bloque completo en la terminal (también funciona desde fish):
 
-Para otro equipo con el usuario local `maetti`, copia solamente `setup.sh` y ejecuta `bash setup.sh PROPIETARIO/personal-remote-server`. La cuenta de GitHub utilizada en la instalación necesita permiso para registrar la clave de despliegue. En una instalación nueva, copia la huella mostrada a la app y pega su clave pública al final del asistente. En una actualización se conservan las claves SSH, los teléfonos autorizados y los scripts.
+```sh
+bash -c '
+set -e
+command -v gh >/dev/null || sudo pacman -S --needed github-cli
+gh auth status --hostname github.com >/dev/null 2>&1 || gh auth login --hostname github.com --git-protocol https --web
+installer=$(mktemp)
+trap "rm -f -- \"$installer\"" EXIT
+gh api --hostname github.com -H "Accept: application/vnd.github.raw+json" "repos/Andatti/personal-remote-server/contents/setup.sh?ref=main" > "$installer"
+bash "$installer" Andatti/personal-remote-server
+'
+```
+
+Si GitHub pide autorización, abre la dirección que indique en el navegador del celular e introduce el código con la cuenta Andatti. El comando descarga el instalador desde la rama main del repositorio privado. El asistente instala las dependencias y registra una clave de lectura propia del nuevo equipo para las actualizaciones diarias.
+
+Al terminar, pega la clave pública RSA de tu app cuando la solicite. En Android agrega el servidor con su IP de VPN, puerto 2222 y la huella SHA256 que mostró el asistente. Guarda los scripts de ese equipo en `/home/maetti/.personalScripts/`.
 
 ## Publicar cambios
 
