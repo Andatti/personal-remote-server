@@ -1,15 +1,27 @@
 # Personal Remote Server
 
-Servidor SSH para la app Android Personal Remote en CachyOS/Arch con systemd. La app usa RSA y comprueba la huella del servidor. Puerto 2222, scripts en `/home/maetti/.personalScripts`.
+Servidor SSH para la app Android Personal Remote para Debian/Ubuntu y Arch/CachyOS con systemd y Python 3.9 o posterior. La app usa RSA y comprueba la huella del servidor. Puerto 2222, scripts en `~/.personalScripts` de la cuenta elegida.
 
 ## Instalar en otra PC desde GitHub
 
-Entra por SSH a la nueva PC CachyOS/Arch como `maetti`, con acceso a sudo. Pega este bloque completo en la terminal (también funciona desde fish):
+Entra por SSH a la nueva PC como root o con una cuenta que tenga sudo. Pega este bloque completo en la terminal (también funciona desde fish):
 
 ```sh
 bash -c '
 set -e
-command -v gh >/dev/null || sudo pacman -S --needed github-cli
+admin=()
+if (( EUID != 0 )); then admin=(sudo); fi
+if ! command -v gh >/dev/null; then
+    if command -v apt-get >/dev/null; then
+        "${admin[@]}" apt-get update
+        "${admin[@]}" apt-get install gh
+    elif command -v pacman >/dev/null; then
+        "${admin[@]}" pacman -S --needed github-cli
+    else
+        echo "Se requiere apt o pacman" >&2
+        exit 1
+    fi
+fi
 gh auth status --hostname github.com >/dev/null 2>&1 || gh auth login --hostname github.com --git-protocol https --web
 installer=$(mktemp)
 trap "rm -f -- \"$installer\"" EXIT
@@ -18,9 +30,9 @@ bash "$installer" Andatti/personal-remote-server
 '
 ```
 
-Si GitHub pide autorización, abre la dirección que indique en el navegador del celular e introduce el código con la cuenta Andatti. El comando descarga el instalador desde la rama main del repositorio privado. El asistente instala las dependencias y registra una clave de lectura propia del nuevo equipo para las actualizaciones diarias.
+Si GitHub pide autorización, abre la dirección que indique en el navegador del celular e introduce el código con una cuenta con permisos para registrar claves de despliegue en el repositorio privado. El comando descarga el instalador desde la rama main del repositorio privado. El asistente instala las dependencias y registra una clave de lectura propia del nuevo equipo para las actualizaciones diarias.
 
-Al terminar, pega la clave pública RSA de tu app cuando la solicite. En Android agrega el servidor con su IP de VPN, puerto 2222 y la huella SHA256 que mostró el asistente. Guarda los scripts de ese equipo en `/home/maetti/.personalScripts/`.
+Al terminar, pega la clave pública RSA de tu app cuando la solicite. En Android agrega el servidor con su IP de VPN, puerto 2222 y la huella SHA256 que mostró el asistente. Guarda los scripts en la carpeta indicada durante la instalación. Al entrar como root, se usa `/root/.personalScripts`. Para elegir otra cuenta local, cambia la última orden a `bash "$installer" --user NOMBRE Andatti/personal-remote-server`. Quien pueda escribir en esa carpeta controla scripts que el teléfono puede ejecutar como root. Al reinstalar se conserva la carpeta configurada por defecto.
 
 ## Publicar cambios
 

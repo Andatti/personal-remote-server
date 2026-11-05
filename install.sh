@@ -15,9 +15,8 @@ fi
 if [[ ! -f /etc/personal-remote/authorized_keys ]]; then
     install -o root -g root -m 600 /dev/null /etc/personal-remote/authorized_keys
 fi
-if [[ ! -d /home/maetti/.personalScripts ]]; then
-    install -d -o maetti -g "$(id -gn maetti)" -m 700 /home/maetti/.personalScripts
-fi
+bash ./setup.sh --machine configure local/offline "${1:-}" "${SUDO_USER:-$(id -un)}"
+[[ -d /run/sshd ]] || install -d -m 755 /run/sshd
 # Upgrade existing app keys: allow PTY while retaining other restrictions.
 python3 - <<'MIGRATE'
 from pathlib import Path
@@ -28,7 +27,7 @@ lines = [line.replace('restrict ssh-rsa ', 'restrict,pty ssh-rsa ', 1)
 p.write_text('\n'.join(lines) + ('\n' if lines else ''))
 p.chmod(0o600)
 MIGRATE
-/usr/bin/sshd -t -f /etc/personal-remote/sshd_config
+/usr/sbin/sshd -t -f /etc/personal-remote/sshd_config
 systemctl daemon-reload
 systemctl enable personal-remote.service
 systemctl restart personal-remote.service

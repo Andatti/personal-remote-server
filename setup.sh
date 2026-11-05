@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CachyOS/Arch, systemd. Run as your normal SSH user.
+# Linux with systemd. Install as root or with sudo.
 set -Eeuo pipefail
 self=$(realpath -- "${BASH_SOURCE[0]}")
 src=$(dirname -- "$self")
@@ -8,7 +8,7 @@ conf=/etc/personal-remote
 lib=/usr/local/lib/personal-remote
 die(){ echo "$*" >&2; exit 1; }
 valid_repo(){ [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+$ && ${1#*/} != . && ${1#*/} != .. ]]; }
-usage(){ echo "Uso: bash setup.sh [PROPIETARIO/REPOSITORIO]"; }
+usage(){ echo "Uso: bash setup.sh [--user CUENTA] [PROPIETARIO/REPOSITORIO]"; }
 
 machine(){
     [[ $EUID == 0 ]] || die 'La preparación de la máquina requiere sudo.'
@@ -23,6 +23,27 @@ machine(){
         die 'Este equipo ya está asociado a otro repositorio.'
     fi
     case "$phase" in
+        configure)
+            local account=$3 home scripts saved="$lib/scripts-dir"
+            install -d -m 755 "$lib"
+            if [[ -z $account && -f $saved ]]; then
+                scripts=$(cat "$saved")
+                [[ -d $scripts ]] || die "Falta la carpeta configurada: $scripts"
+            else
+                if [[ -z $account && -f $lib/runner.py && -d /home/maetti/.personalScripts ]]; then account=maetti; fi
+                account=${account:-${4:?}}
+                home=$(getent passwd "$account" | cut -d: -f6)
+                [[ $home == /* && -d $home ]] || die "La cuenta $account necesita un directorio personal existente."
+                scripts="${home%/}/.personalScripts"
+                [[ -d $scripts ]] || install -d -m 700 -o "$(id -u -- "$account")" -g "$(id -g -- "$account")" "$scripts"
+                local tmp
+                tmp=$(mktemp "$lib/.scripts-dir.XXXXXXXX")
+                printf '%s\n' "$scripts" > "$tmp"
+                chmod 644 "$tmp"
+                mv -fT "$tmp" "$saved"
+            fi
+            echo "Carpeta de scripts: $scripts"
+            ;;
         prepare)
             if [[ ! -f $state/github_read ]]; then
                 ssh-keygen -q -t ed25519 -N '' -C personal-remote-update -f "$state/github_read"
@@ -31,14 +52,12 @@ machine(){
             echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$state/github_known_hosts"
             ;;
         install)
-            id maetti >/dev/null || die 'Este servidor requiere el usuario maetti para /home/maetti/.personalScripts.'
             if [[ ! -d $gitdir ]]; then
                 git init -q --bare "$gitdir"
                 git --git-dir="$gitdir" remote add origin "$url"
             fi
             git --git-dir="$gitdir" config core.sshCommand "/usr/bin/ssh -F /dev/null -o BatchMode=yes -o ConnectTimeout=10 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$state/github_known_hosts -o GlobalKnownHostsFile=/dev/null -o HostKeyAlgorithms=ssh-ed25519 -i $state/github_read"
             install -d -m 755 "$lib"
-            [[ -d /home/maetti/.personalScripts ]] || install -d -o maetti -g "$(id -gn maetti)" -m 700 /home/maetti/.personalScripts
             [[ -f $conf/ssh_host_rsa_key ]] || ssh-keygen -q -t rsa -b 3072 -N '' -f "$conf/ssh_host_rsa_key"
             if [[ ! -f $conf/ssh_host_rsa_key.pub ]]; then ssh-keygen -y -f "$conf/ssh_host_rsa_key" > "$conf/ssh_host_rsa_key.pub"; fi
             [[ -f $conf/authorized_keys ]] || install -m 600 /dev/null "$conf/authorized_keys"
@@ -64,18 +83,37 @@ machine(){
     esac
 }
 
-if [[ ${1:-} == --machine ]]; then [[ $# == 3 ]] || exit 2; machine "$2" "$3"; exit; fi
+if [[ ${1:-} == --machine ]]; then shift; machine "$@"; exit; fi
 if [[ ${1:-} == --help ]]; then usage; exit; fi
+account=
+if [[ ${1:-} == --user ]]; then account=${2:?Falta la cuenta local}; shift 2; fi
 [[ $# -le 1 ]] || { usage; exit 2; }
-[[ $EUID != 0 ]] || die 'Ejecuta bash setup.sh como tu usuario. El instalador solicitará sudo.'
-command -v pacman >/dev/null && [[ -d /run/systemd/system ]] || die 'Se requiere CachyOS/Arch con systemd.'
-id maetti >/dev/null || die 'Se requiere la cuenta local maetti.'
-sudo -v
+[[ -d /run/systemd/system ]] || die 'Se requiere systemd activo.'
+if [[ -n $account ]]; then id -- "$account" >/dev/null || die 'Cuenta local desconocida.'; fi
+admin=()
+if (( EUID != 0 )); then admin=(sudo); sudo -v; fi
+caller=${SUDO_USER:-$(id -un)}
+export PATH="$PATH:/usr/sbin:/sbin"
+if command -v apt-get >/dev/null; then
+    deps=(git:git gh:gh sshd:openssh-server ssh-keyscan:openssh-client python3:python3 flock:util-linux)
+elif command -v pacman >/dev/null; then
+    deps=(git:git gh:github-cli sshd:openssh ssh-keyscan:openssh python3:python flock:util-linux)
+else
+    die 'Gestores soportados: apt (Debian/Ubuntu) y pacman (Arch/CachyOS).'
+fi
 packages=()
-for pair in git:git gh:github-cli sshd:openssh python3:python flock:util-linux; do
+for pair in "${deps[@]}"; do
     command -v "${pair%:*}" >/dev/null || packages+=("${pair#*:}")
 done
-if (( ${#packages[@]} )); then sudo pacman -S --needed "${packages[@]}"; fi
+if (( ${#packages[@]} )); then
+    if command -v apt-get >/dev/null; then
+        "${admin[@]}" apt-get update
+        "${admin[@]}" apt-get install "${packages[@]}"
+    else
+        "${admin[@]}" pacman -S --needed "${packages[@]}"
+    fi
+fi
+python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' || die 'Se requiere Python 3.9 o posterior.'
 export GH_HOST=github.com
 if ! gh auth status --hostname github.com >/dev/null 2>&1; then
     echo 'Autoriza GitHub desde tu navegador con el código que muestre gh.'
@@ -111,18 +149,19 @@ else
     git config --local credential.https://github.com.helper '!gh auth git-credential'
 fi
 
-sudo bash "$self" --machine prepare "$repo"
-public=$(sudo cat "$state/github_read.pub")
+"${admin[@]}" bash "$self" --machine configure "$repo" "$account" "$caller"
+"${admin[@]}" bash "$self" --machine prepare "$repo"
+public=$("${admin[@]}" cat "$state/github_read.pub")
 key_material=$(cut -d' ' -f1-2 <<< "$public")
 registered=$(gh api --paginate "repos/$repo/keys" --jq '.[] | select(.read_only) | .key')
 if ! awk '{print $1, $2}' <<< "$registered" | grep -Fxq "$key_material"; then
     gh api -X POST "repos/$repo/keys" -f title="Personal Remote · $(hostname)" -f key="$public" -F read_only=true --silent
 fi
-sudo bash "$self" --machine install "$repo"
-if ! sudo test -s "$conf/authorized_keys"; then
+"${admin[@]}" bash "$self" --machine install "$repo"
+if ! "${admin[@]}" test -s "$conf/authorized_keys"; then
     echo 'Pega la clave pública RSA de la app para autorizar el teléfono:'
     IFS= read -r phone
-    printf '%s\n' "$phone" | sudo bash "$lib/authorize.sh" /dev/stdin
+    printf '%s\n' "$phone" | "${admin[@]}" bash "$lib/authorize.sh" /dev/stdin
 fi
 echo "Repositorio: https://github.com/$repo"
 systemctl list-timers personal-remote-update.timer --no-pager

@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('runner', Path(__file__).parents[1] / 'runner.py')
 r = importlib.util.module_from_spec(spec)
@@ -21,6 +22,14 @@ class RunnerTests(unittest.TestCase):
         p.chmod(0o700)
         return p
     def run_script(self, name): return r.dispatch('run ' + base64.urlsafe_b64encode(name.encode()).decode())
+    def test_per_host_scripts_directory_and_legacy_default(self):
+        root = Path(self.tmp.name)
+        with patch.object(r, '__file__', str(root / 'runner.py')):
+            self.assertEqual(r.scripts_directory(), Path('/home/maetti/.personalScripts'))
+            scripts = root / 'otro usuario' / '.personalScripts'
+            (root / 'scripts-dir').write_text(str(scripts) + '\n')
+            self.assertEqual(r.scripts_directory(), scripts)
+
     def test_list_and_output_exit(self):
         self.script('hola mundo.sh', 'echo hola; echo error >&2; exit 7')
         self.assertEqual(r.dispatch('list')['scripts'], ['hola mundo.sh'])

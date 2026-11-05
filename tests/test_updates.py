@@ -73,7 +73,7 @@ class UpdateTest(unittest.TestCase):
         config = self.live / 'sshd_config'
         config.write_text(f'HostKey {key}\nPort {port}\nListenAddress 127.0.0.1\nPidFile {self.state}/sshd.pid\nUsePAM no\n')
         (self.live / 'ssh_host_rsa_key.pub').write_bytes(Path(str(key)+'.pub').read_bytes())
-        daemon = subprocess.Popen(['/usr/bin/sshd', '-D', '-f', config])
+        daemon = subprocess.Popen(['/usr/sbin/sshd', '-D', '-f', config])
         try:
             with patch.object(u, 'CONFIG', self.live), patch.object(u, 'check_runner') as check:
                 health_probe()

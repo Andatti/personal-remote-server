@@ -59,12 +59,16 @@ def stage(commit, dest):
     for name in ('runner.py', 'update.py'):
         compile((dest / name).read_bytes(), name, 'exec')
     run('bash', '-n', dest / 'authorize.sh')
-    run('/usr/bin/sshd', '-t', '-f', dest / 'sshd_config')
+    run('/usr/sbin/sshd', '-t', '-f', dest / 'sshd_config')
     run('systemd-analyze', 'verify', *(dest / name for name in (SERVICE, 'personal-remote-update.service', TIMER)))
 
 
 def check_runner():
-    account = pwd.getpwnam('maetti')
+    try:
+        scripts = Path((LIB / 'scripts-dir').read_text().rstrip('\n'))
+    except FileNotFoundError:
+        scripts = Path('/home/maetti/.personalScripts')
+    account = pwd.getpwuid(scripts.stat().st_uid)
     reply = subprocess.run(
         ['/usr/bin/python3', '-I', LIB / 'runner.py'], check=True, capture_output=True,
         timeout=10, user=account.pw_uid, group=account.pw_gid, extra_groups=[], cwd='/',
@@ -76,7 +80,7 @@ def check_runner():
 
 def healthy():
     run('systemctl', 'is-active', '--quiet', SERVICE)
-    config = run('/usr/bin/sshd', '-T', '-f', CONFIG / 'sshd_config').decode().splitlines()
+    config = run('/usr/sbin/sshd', '-T', '-f', CONFIG / 'sshd_config').decode().splitlines()
     port = next(line.split()[1] for line in config if line.lower().startswith('port '))
     expected = (CONFIG / 'ssh_host_rsa_key.pub').read_text().split()[:2]
     for _ in range(5):
@@ -157,7 +161,7 @@ def deploy(commit):
             if not record['running'] or SERVICE in changed:
                 run('systemctl', 'restart', SERVICE)
             elif 'sshd_config' in changed:
-                run('systemctl', 'kill', '--kill-whom=main', '--signal=HUP', SERVICE)
+                run('systemctl', 'kill', '--kill-who=main', '--signal=HUP', SERVICE)
             healthy()
             if TIMER in changed and record['timer_running']:
                 run('systemctl', 'restart', TIMER)
@@ -176,6 +180,8 @@ def main():
     args = parser.parse_args()
     if os.geteuid():
         sys.exit('Se requiere root')
+    if not Path('/run/sshd').exists():
+        run('install', '-d', '-m', '0755', '/run/sshd')
     os.umask(0o077)
     with (STATE / 'lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)

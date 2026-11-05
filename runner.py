@@ -11,7 +11,15 @@ import subprocess
 import sys
 import tempfile
 
-SCRIPTS = Path('/home/maetti/.personalScripts')
+def scripts_directory():
+    try:
+        return Path(Path(__file__).with_name('scripts-dir').read_text().rstrip('\n'))
+    except FileNotFoundError:
+        # Installations predating per-host configuration.
+        return Path('/home/maetti/.personalScripts')
+
+
+SCRIPTS = scripts_directory()
 LOCK = '/run/personal-remote.lock'
 TIMEOUT = 300
 OUTPUT_LIMIT = 256 * 1024
@@ -53,7 +61,7 @@ def dispatch(command):
         import time
         proc = subprocess.Popen([str(path)], cwd=SCRIPTS, stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True,
-            env={'PATH': '/usr/local/sbin:/usr/local/bin:/usr/bin:/bin', 'HOME': '/root',
+            env={'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', 'HOME': '/root',
                  'LANG': 'C.UTF-8', 'USER': 'root', 'LOGNAME': 'root'})
         data = bytearray()
         truncated = False
