@@ -1,0 +1,11 @@
+[Unit]
+Description=Buscar actualizaciones de Personal Remote
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=15min
+RandomizedDelaySec=60s
+Unit=personal-remote-update.service
+
+[Install]
+WantedBy=timers.target

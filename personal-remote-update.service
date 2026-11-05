@@ -1,0 +1,11 @@
+[Unit]
+Description=Actualizar Personal Remote desde GitHub
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /usr/local/lib/personal-remote/update.py
+UMask=0077
+NoNewPrivileges=yes
+TimeoutStartSec=5min

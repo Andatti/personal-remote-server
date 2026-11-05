@@ -1,0 +1,14 @@
+[Unit]
+Description=Personal Remote - servidor SSH de scripts
+After=network.target
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/sshd -t -f /etc/personal-remote/sshd_config
+ExecStart=/usr/bin/sshd -D -e -f /etc/personal-remote/sshd_config
+Restart=on-failure
+RestartSec=3
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
