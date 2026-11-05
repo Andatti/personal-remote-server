@@ -2,9 +2,9 @@
 Description=Buscar actualizaciones de Personal Remote
 
 [Timer]
-OnBootSec=2min
-OnUnitInactiveSec=15min
-RandomizedDelaySec=60s
+OnCalendar=*-*-* 12:00:00
+Persistent=true
+RandomizedDelaySec=15min
 Unit=personal-remote-update.service
 
 [Install]
