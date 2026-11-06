@@ -187,6 +187,10 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX)
         if (STATE / 'pending').exists():
             rollback(STATE / 'pending')
+        # Migrate existing installations of this repository to public HTTPS.
+        if git('remote', 'get-url', 'origin').decode().strip() == 'git@github.com:Andatti/personal-remote-server.git':
+            git('remote', 'set-url', 'origin', 'https://github.com/Andatti/personal-remote-server.git')
+            git('config', 'credential.helper', '')
         if not args.bootstrap:
             git('fetch', '--no-tags', 'origin', 'refs/heads/main')
         commit = git('rev-parse', '--verify', 'FETCH_HEAD^{commit}').decode().strip()
